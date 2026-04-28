@@ -34,5 +34,36 @@ npm run dev
 cd frontend
 npm install
 npm run dev
+```
 
 http://localhost:5173
+
+## Запуск через Docker
+
+### Сборка образа
+```powershell
+docker build -t taskflow .
+```
+
+### Запуск контейнера
+```powershell
+docker run -d -p 3001:3001 --name taskflow-app taskflow
+```
+
+### Проверка работоспособности
+```powershell
+# Проверка ответа API
+curl.exe http://localhost:3001/api/tasks
+
+# Просмотр логов
+docker logs taskflow-app
+
+# Остановка и удаление
+docker stop taskflow-app
+docker rm taskflow-app
+```
+
+### Сборка без кэша (для отладки)
+```powershell
+docker build --no-cache -t taskflow .
+```

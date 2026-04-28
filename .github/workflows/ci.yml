@@ -13,20 +13,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-
       - name: Install dependencies
         run: npm ci --prefix backend
-
       - name: Run ESLint
         run: npm run lint --prefix backend
-
       - name: Check Prettier formatting
         run: npm run format:check --prefix backend
 
@@ -37,18 +33,59 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-
       - name: Install dependencies
         run: npm ci --prefix backend
-
       - name: Verify build
+        run: cd backend && (npm run build || echo "No build script")
+  docker-verify:
+    name: Docker Build & Run Check
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build Docker image
+        run: docker build -t taskflow-verify .
+      
+      - name: Run container and capture logs
         run: |
-          cd backend
-          npm run build 2>/dev/null || echo "No build script, skipping compilation check"
+          # Запускаем контейнер
+          docker run -d -p 3001:3001 --name hw4-check taskflow-verify
+          
+          # Ждём старта (30 секунд с промежуточными логами)
+          echo "⏳ Waiting for app to start..."
+          for i in {1..6}; do
+            sleep 5
+            echo "--- Logs at ${i}x5s ---"
+            docker logs hw4-check 2>&1 || true
+            # Проверяем, слушает ли порт
+            if curl -s http://localhost:3001/api/tasks > /dev/null 2>&1; then
+              echo "✅ App is responding!"
+              break
+            fi
+          done
+          
+          # Финальная проверка
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/tasks || echo "000")
+          
+          if [ "$RESPONSE" != "200" ]; then
+            echo "❌ FAILED: HTTP $RESPONSE"
+            echo "=== Final container logs ==="
+            docker logs hw4-check 2>&1 || echo "No logs available"
+            echo "=== Container status ==="
+            docker inspect hw4-check --format='{{.State.Status}}' || true
+            exit 1
+          fi
+          
+          echo "✅ SUCCESS: HTTP 200"
+          docker stop hw4-check && docker rm hw4-check
+      
+      - name: Print image info
+        run: docker images taskflow-verify --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
