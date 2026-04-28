@@ -1,0 +1,22 @@
+  docker-verify:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build Docker image
+        run: docker build -t taskflow-verify .
+        
+      - name: Verify container startup
+        run: |
+          docker run -d -p 3001:3001 --name hw4-check taskflow-verify
+          sleep 10
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/tasks)
+          if [ "$RESPONSE" != "200" ]; then
+            echo "Container failed to respond with 200 OK"
+            exit 1
+          fi
+          docker stop hw4-check && docker rm hw4-check
+          
+      - name: Print image size
+        run: docker images taskflow-verify --format "Image size: {{.Size}}"
