@@ -1,8 +1,6 @@
 const { AppError } = require('../middleware/errorHandler');
 
-const tasks = [
-  { id: 1, title: 'Изучить архитектуру приложения', status: 'new' }
-];
+const tasks = [{ id: 1, title: 'Изучить архитектуру приложения', status: 'new' }];
 let nextId = 2;
 
 exports.getAll = () => tasks;
