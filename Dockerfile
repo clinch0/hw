@@ -1,41 +1,24 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
-
-WORKDIR /app
-
-# Копируем manifest файлы для кэширования зависимостей
-COPY backend/package*.json ./
-
-# Устанавливаем только продакшн-зависимости
-RUN npm ci --only=production
-
-# Копируем ВЕСЬ бэкенд целиком, чтобы сохранить структуру путей
-COPY backend/ ./backend
-
-# Stage 2: Production runtime
+# Используем LTS версию Node на базе Alpine
 FROM node:20-alpine
 
+# Создаём рабочую директорию
 WORKDIR /app
 
-# Копируем package.json и node_modules из builder
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# Копируем только package.json для кэширования слоя зависимостей
+COPY backend/package*.json ./
 
-# Копируем весь бэкенд из builder
-COPY --from=builder /app/backend ./backend
+# Устанавливаем зависимости (только продакшн)
+RUN npm ci --only=production
 
-# Создаём не-рут пользователя для безопасности
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
-    chown -R nodejs:nodejs /app
+# Копируем весь исходный код бэкенда
+COPY backend/ ./
 
-USER nodejs
-
-# Переменные окружения
-ENV NODE_ENV=production
-ENV PORT=3001
-
+# Открываем порт
 EXPOSE 3001
 
-# Запускаем приложение, указывая правильный путь
-CMD ["node", "backend/src/server.js"]
+# Передаём порт через переменную окружения
+ENV PORT=3001
+
+# Запускаем сервер. 
+# Важно: путь должен быть относительно WORKDIR (/app)
+CMD ["node", "src/server.js"]

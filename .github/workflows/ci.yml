@@ -43,7 +43,6 @@ jobs:
         run: npm ci --prefix backend
       - name: Verify build
         run: cd backend && (npm run build || echo "No build script")
-
   docker-verify:
     name: Docker Build & Run Check
     runs-on: ubuntu-latest
@@ -55,26 +54,38 @@ jobs:
       - name: Build Docker image
         run: docker build -t taskflow-verify .
       
-      - name: Verify container startup
+      - name: Run container and capture logs
         run: |
+          # Запускаем контейнер
           docker run -d -p 3001:3001 --name hw4-check taskflow-verify
-          sleep 25
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/tasks)
+          
+          # Ждём старта (30 секунд с промежуточными логами)
+          echo "⏳ Waiting for app to start..."
+          for i in {1..6}; do
+            sleep 5
+            echo "--- Logs at ${i}x5s ---"
+            docker logs hw4-check 2>&1 || true
+            # Проверяем, слушает ли порт
+            if curl -s http://localhost:3001/api/tasks > /dev/null 2>&1; then
+              echo "✅ App is responding!"
+              break
+            fi
+          done
+          
+          # Финальная проверка
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/tasks || echo "000")
+          
           if [ "$RESPONSE" != "200" ]; then
-            echo "Container failed: HTTP $RESPONSE"
-            docker logs hw4-check
+            echo "❌ FAILED: HTTP $RESPONSE"
+            echo "=== Final container logs ==="
+            docker logs hw4-check 2>&1 || echo "No logs available"
+            echo "=== Container status ==="
+            docker inspect hw4-check --format='{{.State.Status}}' || true
             exit 1
           fi
-          echo "Container OK: HTTP 200"
+          
+          echo "✅ SUCCESS: HTTP 200"
           docker stop hw4-check && docker rm hw4-check
       
       - name: Print image info
         run: docker images taskflow-verify --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
-
-      - name: Debug logs on failure
-        if: failure()
-        run: |
-          echo "=== Container logs ==="
-          docker logs hw4-check 2>&1 || true
-          echo "=== Running processes ==="
-          docker exec hw4-check ps aux 2>&1 || true
